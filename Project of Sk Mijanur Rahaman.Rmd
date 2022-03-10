@@ -1,0 +1,1190 @@
+---
+title: "Word Ranking of the Holy Quran in the base of Principal Component Analysis in R."
+author: "Sk Mijanur Rahaman"
+date: "16/07/2021"
+output: html_document
+---
+
+```{r}
+#Question: What are the most frequent and most dispersed as well as most frequent but less dispersed words,bigrams and trigrams in the Holy Quran?
+
+
+#To find out the rank of words,bigrams and trigrams in the Holy Quran data set in R based on Principal component analysis i.e which words,bigrams and trigrams have most as well as less frequency and which have most as well as less variability in the Quran for both arabic and english languages.
+
+#Procedure: As the data set available in the library "quRan". Now we create new 6 data sets.Each data sets contain frequencies of each words (similar for bigrams and trigrams) in every chapters.
+
+# Therefore the new each data set's each columns contain chapters names and each rows contain the words(similar for bigrams and trigrams) for both arabic and english languages.
+
+#Then we perform Principal Component Analysis in the multivariate data set
+#of the frequency distribution of the each ngrams.
+#As we know that the first Principal Component explain the maximum varibility 
+#in the data. So we order  the ngrams with respect to the first Principal
+#Component. Then we would get the most frequent and most varied ngrams in the 
+#top of the order and  most frequent but less varied ngrams in the bottom 
+#of the order.
+
+library(quRan)
+library(tidytext)
+library(tidyverse)
+library(arabicStemR)
+Sys.setlocale("LC_CTYPE","arabic")
+
+#To ranke of the Holy quran words in arabic:
+############################################################################
+book_id=rep(1,nrow(quran_ar_min))
+quran_ar_min1=cbind(book_id,quran_ar_min)
+head(quran_ar_min1)
+
+
+quran_words <- quran_ar_min1 %>%
+  unnest_tokens(word, text) %>%
+  count(book_id, word, sort = TRUE)
+
+colnames(quran_words)=c("book_id","word","freq_in_book")
+
+head(quran_words)
+
+chapter_words <- quran_ar_min1 %>%
+  unnest_tokens(word, text) %>%
+  count(surah_title_en, word, sort = TRUE)
+
+colnames(chapter_words)=c("surah_title_en","word","freq_in_chapter")
+
+chapter_words=na.omit(chapter_words)
+head(chapter_words)
+
+quran_words=left_join(quran_words,chapter_words)
+
+head(quran_words)
+token_list=as.data.frame(table(chapter_words$surah_title_en,chapter_words$word))
+token_list=token_list[,-3]
+colnames(token_list)=c("surah_title_en","word")
+head(token_list)
+
+
+head(quran_words)
+
+
+quran_words=left_join(token_list,quran_words,by=c("surah_title_en","word"))
+
+quran_words[is.na(quran_words)]=0
+head(quran_words) 
+
+
+
+arabic_stopwords <- data.frame(word = removeStopWords("سلام")$arabicStopwordList)
+
+quran_words=anti_join(quran_words,arabic_stopwords, by = "word")
+
+r=unique(quran_words$word)
+c=unique(quran_ar_min$surah_id)
+
+
+#Frequency distribution of each words per each chapters:
+dword=matrix(quran_words$freq_in_chapter,nrow =nrow(quran_words)/114 ,
+             ncol = 114,byrow = T,dimnames = list(r,c))
+
+head(dword)
+
+
+
+
+pca1=prcomp(t(dword))
+
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+head(pc12)
+
+screeplot(pca1,col="cornflowerblue",main = "Scree plot of pca for
+          word distn in arabic.")
+
+#To rank the we sort with respect to first  principal components: 
+ranking=pca1[[2]][order(pca1[[2]][,1],decreasing = TRUE),]
+head(ranking[,1],10)
+tail(ranking[,1],10)
+tail1=tail(ranking,20)
+ranked=rownames(ranking)
+
+#After ranking we got in top ranked in Arabic:
+head(ranked,100)
+
+#After ranking we got in last ranked in Arabic:
+tail(ranked,100)
+
+
+
+#To plot Top 20 words in the ranking
+
+ranking1=data.frame(x1=rownames(ranking)[1:20], top=ranking[1:20,1])
+
+ggplot(ranking1, aes(x = fct_rev(reorder(x1,-top)),
+                     y = top, fill = top)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Top 20 words in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#To plot Last 20 words in the ranking
+
+ranking2=data.frame(x1=rownames(tail1),Last=tail1[,1])
+
+ggplot(ranking2, aes(x = fct_rev(reorder(x1,-Last)),
+                     y = Last, fill = Last)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Last 20 words in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+dword1=as.data.frame(dword)
+
+f=as.matrix(filter(dword1 ,rownames(dword1) %in% head(ranked,1)))
+f1=as.matrix(filter(dword1 ,rownames(dword1) %in% tail(ranked,1)))
+
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked word:Allah") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#Frequency distribution of The Low ranked word
+ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The Low ranked word: Tukajjiban") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+##########################################################################
+#Manually ranking i.e univariately: 
+
+dword11=data.frame(cbind(dword,rowSums(dword)))
+dword11$zeros=rowSums(dword11==0)
+dword11$occur=114-(dword11$zeros)
+dword11$combine=(.4*dword11$V115)+(.6*dword11$occur)
+write.table(dword11, file = 'posts.csv',sep = "\t", fileEncoding = "UTF-8")
+#=dw
+write.table(dword11,row.names = T,file = "wordfreq1.csv",sep = "\t",fileEncoding = "UTF-8")
+
+ranked=rownames(dword11[order(dword11$combine, decreasing = TRUE),])  
+
+head(ranked)
+tail(ranked)
+dword13=as.data.frame(dword11)
+
+f=as.matrix(filter(dword1 ,rownames(dword1) %in% head(ranked,1)))
+f1=as.matrix(filter(dword1 ,rownames(dword1) %in% tail(ranked,1)))
+
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked word by manually: Allah") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#Frequency distribution of The Low ranked word
+ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The Low ranked word by manually") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+
+
+#To Detect multidimensional outliers, if any, from the projection of 
+#the data:
+
+
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+
+ggplot(pc12, 
+       aes(x=PC2, 
+           y=PC1)) + 
+  geom_point(color="white") +
+  theme_bw() + 
+  ggtitle('First 2 prinipal components') + 
+  xlab("Principal Component 2") + 
+  ylab("Principal Component 1")+
+  geom_text(label=rownames(pc12), 
+            nudge_x = 0.005,
+            nudge_y = 0.005, 
+            size=4,colour="cornflowerblue")
+
+
+
+```
+
+
+
+```{r}
+
+
+book_id=rep(1,nrow(quran_en_sahih))
+quran_en_sahih1=cbind(book_id,quran_en_sahih)
+head(quran_en_sahih1)
+
+
+quran_words <- quran_en_sahih1 %>%
+  unnest_tokens(word, text) %>%
+  count(book_id, word, sort = TRUE)
+
+colnames(quran_words)=c("book_id","word","freq_in_book")
+
+head(quran_words)
+
+chapter_words <- quran_en_sahih1 %>%
+  unnest_tokens(word, text) %>%
+  count(surah_title_en, word, sort = TRUE)
+
+colnames(chapter_words)=c("surah_title_en","word","freq_in_chapter")
+
+chapter_words=na.omit(chapter_words)
+head(chapter_words)
+
+quran_words=left_join(quran_words,chapter_words)
+
+quran_words=anti_join(quran_words,stop_words, by = "word")
+head(quran_words)
+token_list=as.data.frame(table(chapter_words$surah_title_en,chapter_words$word))
+token_list=token_list[,-3]
+colnames(token_list)=c("surah_title_en","word")
+head(token_list)
+
+#book_words=mutate(book_words,ratio=book_words$freq_in_chapter/
+#                  book_words$freq_in_book)
+head(quran_words)
+
+
+quran_words=left_join(token_list,quran_words,by=c("surah_title_en","word"))
+
+quran_words[is.na(quran_words)]=0
+head(quran_words) 
+
+r=unique(quran_words$word)
+c=unique(quran_ar_min$surah_title_en)
+
+dword=matrix(quran_words$freq_in_chapter,nrow =nrow(quran_words)/114 ,
+             ncol = 114,byrow = T,dimnames = list(r,c))
+
+
+head(dword)
+
+
+pca1=prcomp(t(dword))
+
+screeplot(pca1,col="cornflowerblue",main = "Scree plot of pca  word distn in englis.")
+
+#To rank the we sort with respect to first  principal components: 
+ranking=pca1[[2]][order(pca1[[2]][,1],decreasing = TRUE),]
+head(ranking[,1],10)
+tail(ranking[,1],10)
+tail1=tail(ranking,20)
+ranked=rownames(ranking)
+
+#After ranking we got in top ranked words in English:
+head(ranked,100)
+
+#After ranking we got in last ranked in words English:
+tail(ranked,100)
+
+
+#To plot Top 20 words in the ranking
+
+ranking1=data.frame(x1=rownames(ranking)[1:20], top=ranking[1:20,1])
+
+ggplot(ranking1, aes(x = fct_rev(reorder(x1,-top)),
+                     y = top, fill = top)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Top 20 words in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#To plot Last 20 words in the ranking
+
+ranking2=data.frame(x1=rownames(tail1),Last=tail1[,1])
+
+ggplot(ranking2, aes(x = fct_rev(reorder(x1,-Last)),
+                     y = Last, fill = Last)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Last 20 words in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+dword1=as.data.frame(dword)
+
+f=as.matrix(filter(dword1 ,rownames(dword1) %in% head(ranked,1)))
+f1=as.matrix(filter(dword1 ,rownames(dword1) %in% tail(ranked,1)))
+
+#view(t(f))
+#view(t(f1))
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=allah,x=chapter_id,y=allah))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked word") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#Frequency distribution of The Low ranked word
+ggplot(f1,aes(fill=favors,x=chapter_id,y=favors))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The Low ranked word") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#Manually ranking i.e univariately: 
+
+dword11=data.frame(cbind(dword,rowSums(dword)))
+dword11$zeros=rowSums(dword11==0)
+dword11$occur=114-(dword11$zeros)
+dword11$combine=(.4*dword11$V115)+(.6*dword11$occur)
+write.table(dword11, file = 'posts.csv',sep = "\t", fileEncoding = "UTF-8")
+#=dw
+write.table(dword11,row.names = T,file = "wordfreq1.csv",sep = "\t",fileEncoding = "UTF-8")
+
+ranked=rownames(dword11[order(dword11$combine, decreasing = TRUE),])  
+
+head(ranked)
+tail(ranked)
+dword13=as.data.frame(dword11)
+
+f=as.matrix(filter(dword1 ,rownames(dword1) %in% head(ranked,1)))
+f1=as.matrix(filter(dword1 ,rownames(dword1) %in% tail(ranked,1)))
+
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked word by manually") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#Frequency distribution of The Low ranked word
+ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The Low ranked word by manually") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+
+
+
+#To Detect multidimensional outliers, if any, from the projection of 
+#the data:
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+
+ggplot(pc12, 
+       aes(x=PC2, 
+           y=PC1)) + 
+  geom_point(color="white") +
+  theme_bw() + 
+  ggtitle('First 2 prinipal components') + 
+  xlab("Principal Component 2") + 
+  ylab("Principal Component 1")+
+  geom_text(label=rownames(pc12), 
+            nudge_x = 0.005,
+            nudge_y = 0.005, 
+            size=4,colour="cornflowerblue")
+
+```
+
+#To ranke of the Holy Qur'an bigrams in arabic:
+############################################################################
+
+```{r}
+
+book_id=rep(1,nrow(quran_ar_min))
+quran_ar_min1=cbind(book_id,quran_ar_min)
+head(quran_ar_min1)
+
+
+quran_words <- quran_ar_min1 %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+  count(book_id, bigram, sort = TRUE)
+
+colnames(quran_words)=c("book_id","bigram","freq_in_book")
+
+head(quran_words)
+
+chapter_words <- quran_ar_min1 %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+  count(surah_title_en, bigram, sort = TRUE)
+
+colnames(chapter_words)=c("surah_title_en","bigram","freq_in_chapter")
+
+chapter_words=na.omit(chapter_words)
+head(chapter_words)
+
+quran_words=left_join(quran_words,chapter_words)
+
+
+#book_words=anti_join(book_words,arabic_stopwords, by = "word")
+head(quran_words)
+token_list=as.data.frame(table(chapter_words$surah_title_en,chapter_words$bigram))
+token_list=token_list[,-3]
+colnames(token_list)=c("surah_title_en","bigram")
+head(token_list)
+
+#book_words=mutate(book_words,ratio=book_words$freq_in_chapter/
+#                  book_words$freq_in_book)
+head(quran_words)
+
+
+quran_words=left_join(token_list,quran_words,by=c("surah_title_en","bigram"))
+
+quran_words[is.na(quran_words)]=0
+head(quran_words) 
+
+r=unique(quran_words$bigram)
+c=unique(quran_ar_min$surah_title_en)
+
+dbigram=matrix(quran_words$freq_in_chapter,nrow =nrow(quran_words)/114 ,
+             ncol = 114,byrow = T,dimnames = list(r,c))
+
+
+head(dbigram)
+
+
+pca1=prcomp(t(dbigram))
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+head(pc12)
+
+screeplot(pca1,col="cornflowerblue",main = "Scree plot of pca bigram distn
+          in arabic.")
+
+#To rank the we sort with respect to first  principal components: 
+ranking=pca1[[2]][order(pca1[[2]][,1],decreasing = TRUE),]
+head(ranking[,1],10)
+tail(ranking[,1],10)
+tail1=tail(ranking,20)
+ranked=rownames(ranking)
+
+#After ranking we got in top ranked bigrams in Arabic:
+head(ranked,100)
+
+#After ranking we got in top ranked bigrams in Arabic:
+tail(ranked,100)
+
+
+#To plot Top 20 words in the ranking
+
+ranking1=data.frame(x1=rownames(ranking)[1:20], top=ranking[1:20,1])
+
+ggplot(ranking1, aes(x = fct_rev(reorder(x1,-top)),
+                     y = top, fill = top)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Top 20 bigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#To plot Last 20 words in the ranking
+
+ranking2=data.frame(x1=rownames(tail1),Last=tail1[,1])
+
+ggplot(ranking2, aes(x = fct_rev(reorder(x1,-Last)),
+                     y = Last, fill = Last)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Last 20 bigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+dbigram1=as.data.frame(dbigram)
+
+f=as.matrix(filter(dbigram1 ,rownames(dbigram1) %in% head(ranked,1)))
+f1=as.matrix(filter(dbigram1 ,rownames(dbigram1) %in% tail(ranked,1)))
+
+#view(t(f))
+#view(t(f1))
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked bigram: فبأي آلاء") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+  ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The Low ranked bigram: إن الله") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+#To Detect multidimensional outliers, if any, from the projection of 
+#the data:
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+
+ggplot(pc12, 
+       aes(x=PC2, 
+           y=PC1)) + 
+  geom_point(color="white") +
+  theme_bw() + 
+  ggtitle('First 2 prinipal components') + 
+  xlab("Principal Component 2") + 
+  ylab("Principal Component 1")+
+  geom_text(label=rownames(pc12), 
+            nudge_x = 0.005,
+            nudge_y = 0.005, 
+            size=4,colour="cornflowerblue")
+
+
+
+
+```
+
+
+
+#To ranke of the Holy Qur'an bigrams in english:
+############################################################################
+```{r}
+
+
+book_id=rep(1,nrow(quran_en_sahih))
+quran_en_sahih1=cbind(book_id,quran_en_sahih)
+head(quran_en_sahih1)
+
+
+quran_words <- quran_en_sahih1 %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+  count(book_id, bigram, sort = TRUE)
+
+colnames(quran_words)=c("book_id","bigram","freq_in_book")
+
+head(quran_words)
+
+chapter_words <- quran_en_sahih1 %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+  count(surah_title_en, bigram, sort = TRUE)
+
+colnames(chapter_words)=c("surah_title_en","bigram","freq_in_chapter")
+
+chapter_words=na.omit(chapter_words)
+head(chapter_words)
+
+quran_words=left_join(quran_words,chapter_words)
+
+#arabic_stopwords = data.frame(word = removeStopWords("ÓáÇã")$arabicStopwordList)
+
+#book_words=anti_join(book_words,arabic_stopwords, by = "word")
+head(quran_words)
+token_list=as.data.frame(table(chapter_words$surah_title_en,chapter_words$bigram))
+token_list=token_list[,-3]
+colnames(token_list)=c("surah_title_en","bigram")
+head(token_list)
+
+#book_words=mutate(book_words,ratio=book_words$freq_in_chapter/
+#                  book_words$freq_in_book)
+head(quran_words)
+
+
+quran_words=left_join(token_list,quran_words,by=c("surah_title_en","bigram"))
+
+quran_words[is.na(quran_words)]=0
+head(quran_words) 
+
+r=unique(quran_words$bigram)
+c=unique(quran_en_sahih$surah_title_en)
+
+dbigram=matrix(quran_words$freq_in_chapter,nrow =nrow(quran_words)/114 ,
+               ncol = 114,byrow = T,dimnames = list(r,c))
+
+
+head(dbigram)
+
+
+pca1=prcomp(t(dbigram))
+
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+head(pc12)
+
+screeplot(pca1,col="cornflowerblue",main = "Scree plot of pca of bigrams 
+          distn in englis.")
+
+#To rank the we sort with respect to first  principal components: 
+ranking=pca1[[2]][order(pca1[[2]][,1],decreasing = TRUE),]
+head(ranking[,1],10)
+tail(ranking[,1],10)
+tail1=tail(ranking,20)
+ranked=rownames(ranking)
+
+#After ranking we got in top ranked bigrams in English:
+head(ranked,100)
+
+#After ranking we got in last ranked bigrams in English:
+tail(ranked,100)
+
+
+#To plot Top 20 words in the ranking
+
+ranking1=data.frame(x1=rownames(ranking)[1:20], top=ranking[1:20,1])
+
+ggplot(ranking1, aes(x = fct_rev(reorder(x1,-top)),
+                     y = top, fill = top)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Top 20 bigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#To plot Last 20 words in the ranking
+
+ranking2=data.frame(x1=rownames(tail1),Last=tail1[,1])
+
+ggplot(ranking2, aes(x = fct_rev(reorder(x1,-Last)),
+                     y = Last, fill = Last)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Last 20 bigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+dbigram1=as.data.frame(dbigram)
+
+f=as.matrix(filter(dbigram1 ,rownames(dbigram1) %in% head(ranked,1)))
+f1=as.matrix(filter(dbigram1 ,rownames(dbigram1) %in% tail(ranked,1)))
+
+#view(f)
+#view(f1)
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+#Frequency distribution of The top ranked word
+  ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked bigram: those who") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The Low ranked bigram: you deny") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+#To Detect multidimensional outliers, if any, from the projection of 
+#the data:
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+
+ggplot(pc12, 
+       aes(x=PC2, 
+           y=PC1)) + 
+  geom_point(color="white") +
+  theme_bw() + 
+  ggtitle('First 2 prinipal components') + 
+  xlab("Principal Component 2") + 
+  ylab("Principal Component 1")+
+  geom_text(label=rownames(pc12), 
+            nudge_x = 0.005,
+            nudge_y = 0.005, 
+            size=4,colour="cornflowerblue")
+
+
+
+
+
+
+
+
+```
+
+
+#To ranke of the Holy Qur'an trigrams in arabic:
+############################################################################
+```{r}
+
+
+book_id=rep(1,nrow(quran_ar_min))
+quran_ar_min1=cbind(book_id,quran_ar_min)
+head(quran_ar_min1)
+
+
+quran_words <- quran_ar_min1 %>%
+  unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  count(book_id, trigram, sort = TRUE)
+
+colnames(quran_words)=c("book_id","trigram","freq_in_book")
+
+head(quran_words)
+
+chapter_words <- quran_ar_min1 %>%
+  unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  count(surah_title_en, trigram, sort = TRUE)
+
+colnames(chapter_words)=c("surah_title_en","trigram","freq_in_chapter")
+
+chapter_words=na.omit(chapter_words)
+head(chapter_words)
+
+quran_words=left_join(quran_words,chapter_words)
+
+#arabic_stopwords = data.frame(word = removeStopWords("ÓáÇã")$arabicStopwordList)
+
+#book_words=anti_join(book_words,arabic_stopwords, by = "word")
+head(quran_words)
+token_list=as.data.frame(table(chapter_words$surah_title_en,chapter_words$trigram))
+token_list=token_list[,-3]
+colnames(token_list)=c("surah_title_en","trigram")
+head(token_list)
+
+#book_words=mutate(book_words,ratio=book_words$freq_in_chapter/
+#                  book_words$freq_in_book)
+head(quran_words)
+
+
+quran_words=left_join(token_list,quran_words,by=c("surah_title_en","trigram"))
+
+quran_words[is.na(quran_words)]=0
+head(quran_words) 
+
+r=unique(quran_words$trigram)
+c=unique(quran_ar_min$surah_title_en)
+
+dtrigram=matrix(quran_words$freq_in_chapter,nrow =nrow(quran_words)/114 ,
+               ncol = 114,byrow = T,dimnames = list(r,c))
+
+
+
+head(dtrigram)
+
+
+pca1=prcomp(t(dtrigram))
+
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+head(pc12)
+
+screeplot(pca1,col="cornflowerblue",main = "Scree plot of pca of trigrams 
+distn in arabic.")
+
+
+#To rank the we sort with respect to first  principal components: 
+ranking=pca1[[2]][order(pca1[[2]][,1],decreasing = TRUE),]
+head(ranking[,1],10)
+tail(ranking[,1],10)
+tail1=tail(ranking,20)
+ranked=rownames(ranking)
+
+#After ranking we got in top ranked trigrams in Arabic:
+head(ranked,100)
+
+#After ranking we got in last ranked trigrams in Arabic:
+tail(ranked,100)
+
+
+#To plot Top 20 words in the ranking
+
+ranking1=data.frame(x1=rownames(ranking)[1:20], top=ranking[1:20,1])
+
+ggplot(ranking1, aes(x = fct_rev(reorder(x1,-top)),
+                     y = top, fill = top)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Top 20 trigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#To plot Last 20 words in the ranking
+
+ranking2=data.frame(x1=rownames(tail1),Last=tail1[,1])
+
+ggplot(ranking2, aes(x = fct_rev(reorder(x1,-Last)),
+                     y = Last, fill = Last)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Last 20 trigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+dtrigram=as.data.frame(dtrigram)
+
+f=filter(dtrigram ,rownames(dtrigram) %in% head(ranked,1))
+f1=filter(dtrigram ,rownames(dtrigram) %in% tail(ranked,1))
+
+
+#view(t(f))
+#view(t(f1))
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The top ranked trigram: ala rabikuma tukadhiban") +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The 
+  Low ranked trigram: ya ayuha aladhin")+
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+#To Detect multidimensional outliers, if any, from the projection of 
+#the data:
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+
+ggplot(pc12, 
+       aes(x=PC2, 
+           y=PC1)) + 
+  geom_point(color="white") +
+  theme_bw() + 
+  ggtitle('First 2 prinipal components') + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2")+
+  geom_text(label=rownames(pc12), 
+            nudge_x = 0.005,
+            nudge_y = 0.005, 
+            size=4,colour="cornflowerblue")
+
+
+
+
+```
+
+#To ranke of the Holy Qur'an trigrams in englis:
+############################################################################
+
+```{r}
+
+
+book_id=rep(1,nrow(quran_en_sahih))
+quran_en_sahih1=cbind(book_id,quran_en_sahih)
+head(quran_en_sahih1)
+
+
+quran_words <- quran_en_sahih1 %>%
+  unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  count(book_id, trigram, sort = TRUE)
+
+colnames(quran_words)=c("book_id","trigram","freq_in_book")
+
+head(quran_words)
+
+chapter_words <- quran_en_sahih1 %>%
+  unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  count(surah_title_en, trigram, sort = TRUE)
+
+colnames(chapter_words)=c("surah_title_en","trigram","freq_in_chapter")
+
+chapter_words=na.omit(chapter_words)
+head(chapter_words)
+
+quran_words=left_join(quran_words,chapter_words)
+
+#arabic_stopwords = data.frame(word = removeStopWords("ÓáÇã")$arabicStopwordList)
+
+#book_words=anti_join(book_words,arabic_stopwords, by = "word")
+head(quran_words)
+token_list=as.data.frame(table(chapter_words$surah_title_en,chapter_words$trigram))
+token_list=token_list[,-3]
+colnames(token_list)=c("surah_title_en","trigram")
+head(token_list)
+
+#book_words=mutate(book_words,ratio=book_words$freq_in_chapter/
+#                  book_words$freq_in_book)
+head(quran_words)
+
+
+quran_words=left_join(token_list,quran_words,by=c("surah_title_en","trigram"))
+
+quran_words[is.na(quran_words)]=0
+head(quran_words) 
+
+r=unique(quran_words$trigram)
+c=unique(quran_en_sahih$surah_title_en)
+
+dtrigram=matrix(quran_words$freq_in_chapter,nrow =nrow(quran_words)/114 ,
+                ncol = 114,byrow = T,dimnames = list(r,c))
+
+
+head(dtrigram)
+
+
+pca1=prcomp(t(dtrigram))
+
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+head(pc12)
+
+screeplot(pca1,col="cornflowerblue",main = "Scree plot of pca of 
+          trigrams distn in englis.")
+
+#To rank the we sort with respect to first  principal components: 
+ranking=pca1[[2]][order(pca1[[2]][,1],decreasing = TRUE),]
+head(ranking[,1],10)
+tail(ranking[,1],10)
+tail1=tail(ranking,20)
+ranked=rownames(ranking)
+
+#After ranking we got in top ranked trigrams in English:
+head(ranked,100)
+
+#After ranking we got in last ranked trigrams in English:
+tail(ranked,100)
+
+
+#To plot Top 20 words in the ranking
+
+ranking1=data.frame(x1=rownames(ranking)[1:20], top=ranking[1:20,1])
+
+ggplot(ranking1, aes(x = fct_rev(reorder(x1,-top)),
+                     y = top, fill = top)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Top 20 trigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+#To plot Last 20 words in the ranking
+
+ranking2=data.frame(x1=rownames(tail1),Last=tail1[,1])
+
+ggplot(ranking2, aes(x = fct_rev(reorder(x1,-Last)),
+                     y = Last, fill = Last)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::comma) +
+  labs(y = "pc1", x = NULL,title = "Last 20 trigrams in the ranking") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+dtrigram=as.data.frame(dtrigram)
+
+f=filter(dtrigram ,rownames(dtrigram) %in% head(ranked,1))
+f1=filter(dtrigram ,rownames(dtrigram) %in% tail(ranked,1))
+
+
+#view(t(f))
+#view(t(f1))
+
+f=as.data.frame(t(f))
+f=cbind(f,chapter_id=1:114)
+
+f1=as.data.frame(t(f1))
+f1=cbind(f1,chapter_id=1:114)
+
+
+
+#Frequency distribution of The top ranked word
+ggplot(f,aes(fill=f[,1],x=chapter_id,y=f[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The 
+  top ranked trigram: favors of your")+
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+ggplot(f1,aes(fill=f1[,1],x=chapter_id,y=f1[,1]))+
+  geom_col()+
+  labs(y = "Frequency", x ="chapeter_id",title = "Frequency distribution of The 
+ Low ranked trigram: and allah is")+
+  theme_minimal() +
+  theme(panel.grid.major.y = element_blank())
+
+
+
+#To Detect multidimensional outliers, if any, from the projection of 
+#the data:
+
+pc12=data.frame(pca1$rotation[,c(1,2)])
+
+ggplot(pc12, 
+       aes(x=PC1, 
+           y=PC2)) + 
+  geom_point(color="white") +
+  theme_bw() + 
+  ggtitle('First 2 prinipal components') + 
+  xlab("Principal Component 1") + 
+  ylab("Principal Component 2")+
+  geom_text(label=rownames(pc12), 
+            nudge_x = 0.005,
+            nudge_y = 0.005, 
+            size=4,colour="cornflowerblue")
+
+
+```
+
+```{r}
+
+#Conlusion: so by applying the the Principal Component Analysis in 
+#the frequency distribution of the of the each words in the each rows
+#We can easyly find out the most frequent and most dispers words, bigram
+#and trigrams in any
+
+
+#After ranking we got in top ranked in Arabic:
+##   [1] "الله"     "الذين"    "والله"    "آمنوا"    "فإن"      "كان"     
+##   [7] "قال"      "قل"       "الكتاب"   "الناس"    "قالوا"    "بالله"   
+##  [13] "كنتم"     "الأرض"    "أيها"     "كفروا"    "كل"       "فلا"     
+##  [19] "شيء"      "كانوا"    "أنزل"     "أولئك"    "والذين"   "عليم"    
+##  [25] "خير"      "سبيل"     "الدنيا"   "وهو"      "لله"      "يشاء"    
+##  [31] "السماوات" "عذاب"     "النار"    "الحق"     "ربنا"     "أنفسهم"  
+##  [37] "إبراهيم"  "وأنتم"    "منه"      "موسى"     "وكان"     "ربكم"    
+##  [43] "فقد"      "يوم"      "لعلكم"    "المؤمنين" "تعملون"   "منها"    
+##  [49] "واتقوا"   "ربهم"     "يؤمنون"   "الصلاة"   "أهل"      "والأرض" 
+
+
+
+
+#After ranking we got in last ranked in Arabic:
+
+#[1] "الحاقة"   "يسرا"     "لقول"     "يره"      "فضة"      "القدر"   
+##   [7] "إنس"      "الميزان"  "ينبغي"    "حسابا"    "القارعة"  "كيدا"    
+##  [13] "الجبال"   "رجيم"     "سلاما"    "ممنون"    "وبنين"    "صلصال"   
+##  [19] "يتساءلون" "أفرأيتم"  "نبيا"     "ويلنا"    "الأرائك"  "المرسلون"
+##  [25] "سقر"      "عذابي"    "نادى"     "أدبر"     "آخر"      "المأوى"  
+##  [31] "يخشى"     "الصراط"   "ورب"      "ترابا"    "أواب"     "يغني"    
+##  [37] "بالنذر"   "الشمال"   "فذكر"     "مصبحين"   "ونذر"     "يكذب"    
+##  [43] "جند"      "بسم"      "أإنا"     "المسكين"  "يسرنا"    "سرر"     
+##  [49] "باسم"     "وكنا"     "فكانت"    "أإذا"     "راضية"    "أيحسب" 
+
+
+#After ranking we got in top ranked for Englis:
+
+##   [1] "allah"        "people"       "lord"         "fear"         "believed"    
+##   [6] "punishment"   "messenger"    "knowing"      "believers"    "earth"       
+##  [11] "day"          "muhammad"     "scripture"    "revealed"     "truth"       
+##  [16] "disbelievers" "disbelieve"   "fire"         "women"        "prayer"      
+##  [21] "reward"       "merciful"     "wills"        "righteous"    "religion"    
+##  [26] "hearts"       "life"         "verses"       "heavens"      "remember"    
+##  [31] "moses"        "wise"         "abraham"      "forgiving"    "children"    
+##  [36] "spend"        "messengers"   "worship"      "guided"       "fight"       
+##  [41] "mercy"        "follow"       "guidance"     "evil"         "angels"      
+##  [46] "death"        "sin"          "disbelieved"  "world"        "signs"       
+#After ranking we got in last ranked for Englis:
+
+##   [1] "prays"         "leg"           "scorner"       "zaqqum"       
+##   [5] "balance"       "substance"     "multitudes"    "severely"     
+##   [9] "expecting"     "comer"         "planning"      "columns"      
+##  [13] "crusher"       "humanity"      "sparks"        "firewood"     
+##  [17] "hot"           "disintegrated" "swimming"      "observing"    
+##  [21] "repel"         "uninterrupted" "foul"          "strengthened" 
+##  [25] "contents"      "blazing"       "pairs"         "screaming"    
+##  [29] "pearls"        "walks"         "ruined"        "vessels"      
+##  [33] "enumerated"    "scorching"     "inscribed"     "poet"         
+##  [37] "cool"          "ahead"         "shout"         "stakes"       
+##  [41] "glances"       "brocade"       "extent"        "bitter"       
+##  [45] "thrones"       "deprived"      "setting"       "boys"         
+##  [49] "constructed"   "mad"           "happiness"     "assembled"    
+
+
+
+
+
+
+
+```
